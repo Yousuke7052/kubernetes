@@ -1,0 +1,112 @@
+# 使用kubeadm部署集群
+### 1.環境準備
+##### master 2c2g 192.168.205.200
+##### node1 2c2g 192.168.205.201
+##### node2 2c2g 192.168.205.202
+####### 三台可同步操作
+####### [~]# yum -y install vim
+####### [~]# yum -y install net-tools
+
+### 2.集群安裝環境準備
+##### 1)關閉防火牆、關閉seLinux
+####### 三台可同步操作
+####### [~]# sysetmctl stop firewalld
+####### [~]# sysetmctl disable firewalld
+####### [~]# sed -i 's/enforcing/disabled/' /etc/selinux/config       # 永久
+####### [~]# setenforce 0                                             # 臨時
+####### [~]# getenforce                                               # 顯示Permissive
+##### 2)各節點主機名解析
+####### 三台可同步操作
+####### [~]# vim /etc/hosts
+####### 192.168.205.200 master                                        # 三台主機皆輸入這三行內容至文件中
+####### 192.168.205.201 node1                                         # 三台主機皆輸入這三行內容至文件中
+####### 192.168.205.202 node2                                         # 三台主機皆輸入這三行內容至文件中
+##### 3)關閉交換分區
+####### 做k8s,不需要用交換分區,交換分區:物理內存不夠時會使用,用了會導致運行速度很慢,因為交換分區是在硬盤讀寫速度慢於內存
+####### 三台可同步操作
+####### [~]# sed -ri 's/.*swap.*/#&/' /etc/fstab                      # 永久關閉
+####### [~]# swapoff -a                                               # 臨時關閉
+####### [~]# free -h                                                  # Swap那一行會顯示為0 有total,used,free
+##### 4)各節點主機時間同步
+####### 分開操作
+####### master機台操作:
+####### [~]# vim /etc/chrony.conf
+####### server 0.centos.pool.ntp.org iburst
+####### server 1.centos.pool.ntp.org iburst
+####### server 2.centos.pool.ntp.org iburst
+####### server 3.centos.pool.ntp.org iburst
+####### #Allow NTP client access from local network.
+####### #allow 192.168.0.0/16
+####### 這行新增自己設定的網段,就是205
+####### allow 192.168.205.0/24
+####### [~]# netstat -tunlp                                            # 時間同步服務佔用123,323兩個端口,
+#######                                                                # 默認開啟323,客戶端用的,123服務端用
+####### [~]# systemctl restart chronyd
+####### [~]# netstat -tunlp
+####### node機台操作:
+####### [~]# vim /etc/chrony.conf
+####### #server 0.centos.pool.ntp.org iburst
+####### #server 1.centos.pool.ntp.org iburst
+####### #server 2.centos.pool.ntp.org iburst
+####### #server 3.centos.pool.ntp.org iburst
+####### server 192.168.205.200 iburst
+####### [~]# systemctl restart chronyd
+####### [~]# chronyc sources -v                                         # Name/IP address下應該為^* master
+#######                                                                 # 若*是?就有問題了 問號表示沒連接上master時間
+##### 5)配置網路模塊與參數
+####### 查看模塊是否加載
+####### [~]# lsmod | grep overlay                                       # 若沒加載會沒訊息
+####### [~]# lsmod | grep br_netfilter                                  # 若沒加載會沒訊息
+####### [~]# modprobe -a overlay
+####### [~]# modprobe -a br_netfilter
+####### [~]# lsmod | grep overlay                                       
+####### [~]# lsmod | grep br_netfilter                                  
+####### 加載後再次查看模塊是否加載
+####### 修改網橋網路參數:解決於iptables被繞過而導致流量路由不正確問題
+####### [~]# cat > /etc/sysctl.d/k8s.conf << EOF
+####### [~]# net.ipv4.ip_forward = 1
+####### [~]# vm.swappiness = 0
+####### [~]# net.bridge.bridge-nf-call-ip6tables = 1
+####### [~]# net.bridge.bridge-nf-call-iptables = 1
+####### [~]# EOF
+####### [~]# sysctl --system
+
+### 3.安裝核心組件
+##### 1)準備yum源(baes源,epl源,docker源)
+####### 1-1.base源,用的aliyun,並參考yum源更換.txt
+####### 1-2.epl源
+####### [~]# sudo yum install -y epel-release                           # 這邊用的是CentOS8, wget抓aliyun失敗
+####### [~]# ls /etc/yum.repos.d/epel*.repo                             # 驗證epel源是否已添加
+####### 1-3.docker源
+####### [~]# sudo yum install -y yum-utils
+####### [~]# wget https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo -O /etc/yum.repos.d/docker-ce.repo
+####### [~]# 
+##### 2)安裝docker引擎和container (安裝docker可以提供容器的運行環境,但不支持管理docker去管理容器)
+####### 三台可同步操作
+####### [~]# yum -y install docker-ce-20.10.16 docker-ce-cli-20.10.16 containerd.io
+####### [~]# systemctl enable docker
+####### [~]# systemctl start docker
+####### 這邊如果不使用docker,直接安裝container就可以
+####### [~]# yum -y install conatinerd                                  # 若產生衝突 用下一行
+####### [~]# sudo yum -y install conatinerd.io --allowerasing           # containerd.io-1.6
+##### 3)配置鏡像加速器,不使用docker,就不用跑這個鏡像加速了,跳過
+####### [~]# $ cat > /etc/docker/daemon.json << EOF
+####### [~]# {
+####### [~]# "registry-mirrors": ["https://hub-mirror.c.163.com"]
+####### [~]# }
+####### [~]# EOF
+####### [~]# $ systemctl restart docker
+##### 4)準備k8s組件的yum源
+####### [~]# 
+##### 5)
+##### 做到enable
+##### 先不要start
+####### [~]# 
+##### 6)修改容器運行時配置文件
+####### 初始化前需要修改container服務的配置文件
+####### [~]# 
+
+##### 7)初始化集群
+####### master機台操作:
+####### [~]# 
+
