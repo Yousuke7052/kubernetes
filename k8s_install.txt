@@ -3,6 +3,7 @@
 ##### master 2c2g 192.168.205.200
 ##### node1 2c2g 192.168.205.201
 ##### node2 2c2g 192.168.205.202
+####### [~]# vim /etc/sysconfig/network-scripts/ifcfg-ens33         # 改ip用
 ####### 三台可同步操作
 ####### [~]# yum -y install vim
 ####### [~]# yum -y install net-tools
