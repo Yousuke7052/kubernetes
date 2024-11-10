@@ -111,11 +111,22 @@
 #######      net.bridge.bridge-nf-call-iptables = 1
 #######      EOF
 ####### [~]# sudo sysctl --system
+####### 檢查內核參數,以下四行結果分別為1, 0, 1, 1
+####### [~]# sysctl net.ipv4.ip_forward
+####### [~]# sysctl vm.swappiness
+####### [~]# sysctl net.bridge.bridge-nf-call-ip6tables
+####### [~]# sysctl net.bridge.bridge-nf-call-iptables
+####### 安裝container
+####### [~]# sudo apt install -y containerd
+####### 配置container
+####### [~]# sudo mkdir -p /etc/containerd
+####### [~]# containerd config default | sudo tee /etc/containerd/config.toml
+####### 重啟container
+####### [~]# sudo systemctl restart containerd
+####### 檢查container
+####### [~]# sudo systemctl status containerd
+####### [~]# ctr version
 
-sysctl net.ipv4.ip_forward
-sysctl vm.swappiness
-sysctl net.bridge.bridge-nf-call-ip6tables
-sysctl net.bridge.bridge-nf-call-iptables
 
 sudo apt install -y curl apt-transport-https ca-certificates gnupg
 
