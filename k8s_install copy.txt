@@ -37,11 +37,15 @@
 ### 2.集群安裝環境準備
 ##### 1)各節點主機名解析
 ####### 三台可同步操作
-####### [~]# vim /etc/hosts
+####### [~]# sudo nano /etc/hosts
 ####### 192.168.205.200 master                                        # 三台主機皆輸入這三行內容至文件中
 ####### 192.168.205.201 node1                                         # 三台主機皆輸入這三行內容至文件中
 ####### 192.168.205.202 node2                                         # 三台主機皆輸入這三行內容至文件中
-
+####### 文件上方改為
+####### 127.0.1.1   <new-hostname>
+####### [~]# sudo nano /etc/hosts
+####### new-hostname
+####### [~]# sudo reboot                                              # 改完後重啟   
 ##### 2)關閉防火牆、關閉seLinux
 ####### 三台可同步操作
 ####### # 停用和禁用 ufw（防火牆）
@@ -116,6 +120,7 @@
 ####### [~]# sysctl vm.swappiness
 ####### [~]# sysctl net.bridge.bridge-nf-call-ip6tables
 ####### [~]# sysctl net.bridge.bridge-nf-call-iptables
+##### 6)安裝容器
 ####### 安裝container
 ####### [~]# sudo apt install -y containerd
 ####### 配置container
@@ -126,55 +131,29 @@
 ####### 檢查container
 ####### [~]# sudo systemctl status containerd
 ####### [~]# ctr version
+##### 7) kubeadm、kubelet、kubectl組件的安裝
+####### 安裝必要的依賴:
+####### [~]# sudo apt install -y curl apt-transport-https ca-certificates gnupg
+####### 可能安裝失敗,刪除現有的APT,若想嘗試其他源,執行下面這一行
+####### [~]# sudo rm /etc/apt/sources.list.d/kubernetes.list
+####### 不確定可以先查看看存放gpg密鑰的資料夾存不存在, 不存在要創建
+####### [~]# sudo mkdir -p /etc/apt/keyrings
+####### [~]# curl -fsSL https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes.gpg
+####### 這裡是鏡像源:
+####### [~]# echo "deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
+####### [~]# sudo apt update
+####### 列出可用版本
+####### [~]# sudo apt-cache policy kubelet kubeadm kubectl
+####### [~]# sudo apt install -y kubelet=1.26.3-00 kubeadm=1.26.3-00 kubectl=1.26.3-00
+####### 鎖定版本防止意外升級
+####### [~]# sudo apt-mark hold kubelet kubeadm kubectl
+####### 檢查版本
+####### [~]# kubelet --version
+####### [~]# kubeadm version
+####### [~]# kubectl version --client
 
 
-sudo apt install -y curl apt-transport-https ca-certificates gnupg
-
-# 添加 Kubernetes 的 GPG 密钥
-curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/kubernetes-archive-keyring.gpg
-
-# 创建 Kubernetes 的 APT 仓库配置文件
-echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee /etc/apt/sources.list.d/kubernetes.list
-
-sudo apt update
-sudo apt install -y kubelet=1.26.3-00 kubeadm=1.26.3-00 kubectl=1.26.3-00
-
-### 3.安裝核心組件
-##### 1)準備yum源(baes源,epl源,docker源)
-####### 1-1.base源,用的aliyun,並參考yum源更換.txt
-####### 1-2.epl源
-####### [~]# sudo yum install -y epel-release                           # 這邊用的是CentOS8, wget抓aliyun失敗
-####### [~]# ls /etc/yum.repos.d/epel*.repo                             # 驗證epel源是否已添加
-####### 1-3.docker源
-####### [~]# sudo yum install -y yum-utils
-####### [~]# wget https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo -O /etc/yum.repos.d/docker-ce.repo
-####### [~]# 
-##### 2)安裝docker引擎和container (安裝docker可以提供容器的運行環境,但不支持管理docker去管理容器)
-####### 三台可同步操作
-####### [~]# yum -y install docker-ce-20.10.16 docker-ce-cli-20.10.16 containerd.io
-####### [~]# systemctl enable docker
-####### [~]# systemctl start docker
-####### 這邊如果不使用docker,直接安裝container就可以
-####### [~]# yum -y install conatinerd                                  # 若產生衝突 用下一行
-####### [~]# sudo yum -y install conatinerd.io --allowerasing           # containerd.io-1.6
-##### 3)配置鏡像加速器,不使用docker,就不用跑這個鏡像加速了,跳過
-####### [~]# $ cat > /etc/docker/daemon.json << EOF
-####### [~]# {
-####### [~]# "registry-mirrors": ["https://hub-mirror.c.163.com"]
-####### [~]# }
-####### [~]# EOF
-####### [~]# $ systemctl restart docker
-##### 4)準備k8s組件的yum源
-####### [~]# 
-##### 5)
-##### 做到enable
-##### 先不要start
-####### [~]# 
-##### 6)修改容器運行時配置文件
-####### 初始化前需要修改container服務的配置文件
-####### [~]# 
-
-##### 7)初始化集群
+##### 8)初始化集群
 ####### master機台操作:
-####### [~]# 
+####### [~]# sudo kubeadm init --pod-network-cidr=10.244.0.0/16
 
