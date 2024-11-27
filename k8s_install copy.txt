@@ -46,6 +46,8 @@
 ####### [~]# sudo nano /etc/hosts
 ####### new-hostname
 ####### [~]# sudo reboot                                              # 改完後重啟   
+#######
+#######
 ##### 2)關閉防火牆、關閉seLinux
 ####### 三台可同步操作
 ####### # 停用和禁用 ufw（防火牆）
@@ -56,6 +58,8 @@
 ####### # 確認 ufw 和 apparmor 的狀態
 ####### [~]# sudo ufw status
 ####### [~]# sudo aa-status
+#######
+#######
 ##### 3)關閉交換分區
 ####### 做k8s,不需要用交換分區,交換分區:物理內存不夠時會使用,用了會導致運行速度很慢,因為交換分區是在硬盤讀寫速度慢於內存
 ####### 三台可同步操作
@@ -63,6 +67,8 @@
 ####### [~]# sudo swapoff -a
 ####### [~]# sudo sed -i '/ swap / s/^/#/' /etc/fstab
 ####### [~]# free -have                                               # Swap那一行會顯示為0 有total,used,free
+#######
+#######
 ##### 4)各節點主機時間同步
 ####### 分開操作
 ####### master機台操作:
@@ -91,6 +97,8 @@
 ####### [~]# systemctl restart chronyd
 ####### [~]# chronyc sources -v                                         # Name/IP address下應該為^* master
 #######                                                                 # 若*是?就有問題了 問號表示沒連接上master時間
+#######
+#######
 ##### 5)配置網路模塊與參數
 ####### 查看模塊是否加載
 ####### [~]# lsmod | grep overlay                                       # 若沒加載會沒訊息
@@ -120,6 +128,8 @@
 ####### [~]# sysctl vm.swappiness
 ####### [~]# sysctl net.bridge.bridge-nf-call-ip6tables
 ####### [~]# sysctl net.bridge.bridge-nf-call-iptables
+#######
+#######
 ##### 6)安裝容器
 ####### 安裝container
 ####### [~]# sudo apt install -y containerd
@@ -131,6 +141,8 @@
 ####### 檢查container
 ####### [~]# sudo systemctl status containerd
 ####### [~]# ctr version
+#######
+#######
 ##### 7) kubeadm、kubelet、kubectl組件的安裝
 ####### 安裝必要的依賴:
 ####### [~]# sudo apt install -y curl apt-transport-https ca-certificates gnupg
@@ -151,9 +163,64 @@
 ####### [~]# kubelet --version
 ####### [~]# kubeadm version
 ####### [~]# kubectl version --client
-
-
+#######
+#######
 ##### 8)初始化集群
 ####### master機台操作:
 ####### [~]# sudo kubeadm init --pod-network-cidr=10.244.0.0/16
-
+####### 配置kubelet
+####### [~]# mkdir -p $HOME/.kube
+####### [~]# sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+####### [~]# sudo chown $(id -u):$(id -g) $HOME/.kube/config
+####### 安裝pod網路插件
+####### [~]# kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+####### 驗證pod網路插件
+####### [~]# kubectl get pods --all-namespaces
+####### 驗證master節點狀態
+####### [~]# kubectl get nodes
+####### 檢查並拉取必要鏡像
+####### [~]# sudo kubeadm config images pull --image-repository=registry.aliyuncs.com/google_containers
+####### 
+####### 這邊是三節點要做的
+####### 创建 crictl 配置文件
+####### [~]# cat <<EOF | sudo tee /etc/crictl.yaml
+#######      runtime-endpoint: unix:///run/containerd/containerd.sock
+#######      image-endpoint: unix:///run/containerd/containerd.sock
+#######      timeout: 10
+#######      debug: false
+#######      EOF
+####### 修改cgroups
+####### [~]# sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+####### 確保CRI插件未禁用
+####### [~]# sudo sed -i '/disabled_plugins =/d' /etc/containerd/config.toml
+####### 修改sandbox_image的值
+####### [~]# sudo kubeadm config images list --image-repository=registry.aliyuncs.com/google_containers
+####### [~]# sudo sed -i 's/sandbox_image = .*/sandbox_image = "registry.aliyuncs.com\/google_containers\/pause:3.9"/' /etc/containerd/config.toml
+####### 重啟container
+####### [~]# sudo systemctl restart containerd
+####### 檢查拉取的鏡像
+####### [~]# sudo crictl images
+####### 若NODE節點拉取鏡像錯誤，可以執行以下命令
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/kube-apiserver:v1.26.15 || sudo crictl pull registry.aliyuncs.com/google_containers/kube-apiserver:v1.26.15
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/kube-controller-manager:v1.26.15 || sudo crictl pull registry.aliyuncs.com/google_containers/kube-controller-manager:v1.26.15
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/kube-scheduler:v1.26.15 || sudo crictl pull registry.aliyuncs.com/google_containers/kube-scheduler:v1.26.15
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/kube-proxy:v1.26.15 || sudo crictl pull registry.aliyuncs.com/google_containers/kube-proxy:v1.26.15
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/pause:3.9 || sudo crictl pull registry.aliyuncs.com/google_containers/pause:3.9
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/etcd:3.5.6-0 || sudo crictl pull registry.aliyuncs.com/google_containers/etcd:3.5.6-0
+####### [~]# sudo crictl images | grep registry.aliyuncs.com/google_containers/coredns:v1.9.3 || sudo crictl pull registry.aliyuncs.com/google_containers/coredns:v1.9.3
+#######
+#######
+##### 9)加入集群
+#######首先,master運行這一行
+####### [~]# kubeadm token create --print-join-command
+####### 會生成類似以下的命令
+####### kubeadm join <master-ip>:<master-port> --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+####### 然後改成以下這樣去node節點上運行
+####### [~]# sudo kubeadm join <master-ip>:<master-port> --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+####### 加入失敗時:
+####### [~]# sudo kubeadm reset     # 按y
+####### [~]# sudo systemctl restart kubelet
+####### 再次重新加入
+####### [~]# sudo kubeadm join <master-ip>:<master-port> --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+####### master上運行,以查看節點狀況
+####### [~]# kubectl get nodes
